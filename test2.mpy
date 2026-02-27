@@ -1,0 +1,150 @@
+# ------------------------------------------------------------
+# ESP32 + BMP280 Weather Station - Access Point Mode
+# ------------------------------------------------------------
+
+try:
+    import usocket as socket
+except:
+    import socket
+
+from machine import Pin, SoftI2C
+import network
+import gc
+import math
+from utime import sleep, sleep_ms
+
+gc.collect()
+
+# ------------------- Status LED -------------------
+led = Pin(33, Pin.OUT)
+led.value(1)                                 # 1 = OFF (active-low on most boards)
+
+# ------------------- WiFi Access Point -------------------
+ssid = 'bmp_weather'
+password = 'bps12345'                        # ≥8 characters
+
+ap = network.WLAN(network.AP_IF)
+ap.active(True)
+ap.config(essid=ssid, password=password)
+
+# Fixed IP so you always know the address
+ap.ifconfig(('192.168.4.23', '255.255.255.0', '192.168.4.23', '8.8.8.8'))
+
+while not ap.active():
+    sleep(0.1)
+
+print('\n=== Access Point Ready ===')
+print('SSID     :', ssid)
+print('Password :', password)
+print('IP       : http://{}/\n'.format(ap.ifconfig()[0]))
+
+# ------------------- BMP280 on SoftI2C -------------------
+i2c = SoftI2C(scl=Pin(2), sda=Pin(15), freq=400000)   # 100 kHz is more reliable than 400 k on long wires
+
+print("Scanning I2C bus...", end=" ")
+devices = i2c.scan()
+print(devices)
+
+if devices:
+    # Success blink
+    for _ in range(6):
+        led.value(not led.value())
+        sleep_ms(150)
+    led.value(1)   # turn off again
+else:
+    print("BMP280 not found! Check wiring.")
+    while True:
+        led.value(0)
+        sleep_ms(100)
+        led.value(1)
+        sleep_ms(900)
+
+import bmp280 as bmp
+sensor = bmp.BMP280(i2c)
+sensor.use_case(bmp.BMP280_CASE_INDOOR)        # or BMP280_CASE_HANDHELD_DYN for better altitude
+
+# Update this value daily from a local airport or https://weather.com
+sea_level_hpa = 1013.25
+
+# ------------------- Gorgeous Web Page -------------------
+def web_page(temp, pres_hpa, alt):
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BMP280 Weather</title>
+<meta http-equiv="refresh" content="8">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;500;700&display=swap');
+body{{margin:0;font-family:'Poppins',sans-serif;background:linear-gradient(135deg,#0f2027,#203a43,#2c5364);color:#fff;min-height:100vh;display:flex;align-items:center;justify-content:center}}
+.container{{background:rgba(255,255,255,0.1);backdrop-filter:blur(12px);border-radius:20px;padding:35px;box-shadow:0 10px 40px rgba(0,0,0,0.5);text-align:center;width:90%;max-width:420px}}
+h1{{font-size:2.8em;background:linear-gradient(90deg,#00dbde,#fc00ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin:0 0 20px}}
+.readings{{font-size:1.9em;line-height:1.8}}
+.value{{font-weight:700;color:#00ffea;font-size:1.3em}}
+.unit{{font-size:0.6em;color:#a0f7ff}}
+.footer{{margin-top:30px;font-size:0.9em;color:#88cccc}}
+.icon{{font-size:4.5em}}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="icon">🌤️</div>
+<h1>Weather Station</h1>
+<div class="readings">
+<div>🌡️ Temperature <span class="value">{temp:.2f}</span><span class="unit">°C</span></div>
+<div>🗜️ Pressure <span class="value">{pres_hpa:.2f}</span><span class="unit"> hPa</span></div>
+<div>({pres_hpa*0.75006:.1f} mmHg)</div>
+<div>🗻 Altitude <span class="value">{alt:.1f}</span><span class="unit"> m</span></div>
+</div>
+<div class="footer">
+Sea-level: {sea_level_hpa} hPa • Auto-refresh 8s<br>
+ESP32 + BMP280
+</div>
+</div>
+</body>
+</html>"""
+    return html
+
+# ------------------- Web Server -------------------
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.bind(('', 80))
+s.listen(5)
+
+print("Web server started → http://{}/\n".format(ap.ifconfig()[0]))
+
+while True:
+    try:
+        # LED on while serving
+        led.value(0)
+
+        temp = sensor.temperature
+        pressure_pa = sensor.pressure
+        pressure_hpa = pressure_pa / 100
+        altitude = 44330.77 * (1 - math.pow(pressure_hpa / sea_level_hpa, 0.190223))
+
+        print(f"{temp:.2f} °C | {pressure_hpa:.2f} hPa | {altitude:.1f} m")
+
+        conn, addr = s.accept()
+        conn.settimeout(4.0)
+        print("Client:", addr)
+
+        request = conn.recv(1024)        # clear buffer
+
+        response = web_page(temp, pressure_hpa, altitude)
+
+        conn.send(b'HTTP/1.1 200 OK\nContent-Type: text/html\nConnection: close\n\n')
+        conn.sendall(response.encode('utf-8'))
+        conn.close()
+
+        led.value(1)                     # LED off again
+        gc.collect()
+        sleep_ms(150)
+
+    except Exception as e:
+        try:
+            conn.close()
+        except:
+            pass
+        led.value(1)
+        print("Error:", e)
