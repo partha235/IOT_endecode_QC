@@ -84,11 +84,24 @@ while True:
 
     try:
         # temp = sensor.temperature           # usually float e.g. 23.45
-        temp=33.5
-        temp_scaled = int(temp * 10 + 0.5)  # round to nearest → 235 = 23.5 °C
-        print(f"Temperature: {temp:.2f} °C  → scaled: {temp_scaled}")
+        temp = 33.5
+        hum = 61.2
+        press = 1012.3
 
-        data_bits = int_to_bits(temp_scaled, 16)
+        temp_scaled  = int(temp * 10 + 0.5)
+        hum_scaled   = int(hum * 10 + 0.5)
+        press_scaled = int(press * 10 + 0.5)
+
+        print("Temp :", temp_scaled)
+        print("Hum  :", hum_scaled)
+        print("Press:", press_scaled)
+       
+
+        temp_bits  = int_to_bits(temp_scaled, 16)
+        hum_bits   = int_to_bits(hum_scaled, 16)
+        press_bits = int_to_bits(press_scaled, 16)
+        
+        data_bits = temp_bits + hum_bits + press_bits
         print("Bits:", data_bits)
 
         # global key_pos

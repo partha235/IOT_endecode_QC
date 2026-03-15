@@ -8,27 +8,27 @@ import os       # for os.urandom() on ESP32
 # ────────────────────────────────────────
 # CONFIG
 # ────────────────────────────────────────
-SSID = "bps_wifi"
-PASSWORD = "sagabps@235"
-SERVER_IP = "192.168.1.12"
+SSID = "your_wifi"
+PASSWORD = "your_password"
+SERVER_IP = "192.168.1.7"
 PORT = 5000
 
 # I2C pins – adjust if your wiring is different (GPIO2 & GPIO15 are common defaults)
-# i2c = SoftI2C(scl=Pin(2), sda=Pin(15), freq=100000)
+i2c = SoftI2C(scl=Pin(2), sda=Pin(15), freq=100000)
 
 # You need to upload bmp280.py to the board first!
 # Recommended: https://github.com/dafvid/micropython-bmp280  (very lightweight)
 # or https://github.com/robert-hh/BME280 (bme280_float.py also works with BMP280)
-# from bmp280 import BMP280
-# sensor = BMP280(i2c)
+from bmp280 import BMP280
+sensor = BMP280(i2c)
 
 # ────────────────────────────────────────
 # Simulated long QKD key (in real QKD you'd get fresh bits from quantum source)
-# Shared QKD key (must match server)
-qkd_key = [1,0,1,1,0,0,1,0,1,0,1,0,0,1,1,0]
-
-print("QKD key:", qkd_key)
-# print("Generated simulated QKD key (first 32 bits):", qkd_key[:32])
+# Here we generate 1024 pseudo-random bits using os.urandom (ESP32 uses hardware TRNG)
+# 1024 bits = 128 bytes
+key_bytes = os.urandom(128)               # hardware-backed random on ESP32
+qkd_key = [ (b >> i) & 1 for b in key_bytes for i in range(7,-1,-1) ]   # flatten to list of 0/1
+print("Generated simulated QKD key (first 32 bits):", qkd_key[:32])
 
 key_pos = 0
 
@@ -76,19 +76,18 @@ while True:
     if not wifi.isconnected():
         print("WiFi lost → reconnecting...")
         wifi.connect(SSID, PASSWORD)
-        time.sleep(3)
+        time.sleep(4)
         continue
 
     try:
-        # temp = sensor.temperature           # usually float e.g. 23.45
-        temp=33.5
+        temp = sensor.temperature           # usually float e.g. 23.45
         temp_scaled = int(temp * 10 + 0.5)  # round to nearest → 235 = 23.5 °C
         print(f"Temperature: {temp:.2f} °C  → scaled: {temp_scaled}")
 
         data_bits = int_to_bits(temp_scaled, 16)
         print("Bits:", data_bits)
 
-        # global key_pos
+        global key_pos
         enc_bits, key_pos = xor_encrypt(data_bits, qkd_key, key_pos)
         print("Encrypted bits:", enc_bits)
 
