@@ -1,0 +1,110 @@
+import network
+import socket
+from machine import Pin, SoftI2C
+import time
+# import random   # uncomment if you want pseudo-random fallback
+import os       # for os.urandom() on ESP32
+
+# ────────────────────────────────────────
+# CONFIG
+# ────────────────────────────────────────
+SSID = "bps_wifi"
+PASSWORD = "sagabps@235"
+SERVER_IP = "192.168.1.12"
+PORT = 5000
+
+# I2C pins – adjust if your wiring is different (GPIO2 & GPIO15 are common defaults)
+# i2c = SoftI2C(scl=Pin(2), sda=Pin(15), freq=100000)
+
+# You need to upload bmp280.py to the board first!
+# Recommended: https://github.com/dafvid/micropython-bmp280  (very lightweight)
+# or https://github.com/robert-hh/BME280 (bme280_float.py also works with BMP280)
+# from bmp280 import BMP280
+# sensor = BMP280(i2c)
+
+# ────────────────────────────────────────
+# Simulated long QKD key (in real QKD you'd get fresh bits from quantum source)
+# Shared QKD key (must match server)
+qkd_key = [1,0,1,1,0,0,1,0,1,0,1,0,0,1,1,0]
+
+print("QKD key:", qkd_key)
+# print("Generated simulated QKD key (first 32 bits):", qkd_key[:32])
+
+key_pos = 0
+
+# ────────────────────────────────────────
+# Helper functions
+# ────────────────────────────────────────
+def int_to_bits(value, bits=16):
+    """Convert integer to list of bits (MSB first)"""
+    out = []
+    for i in range(bits):
+        out.append( (value >> (bits - 1 - i)) & 1 )
+    return out
+
+def xor_encrypt(data_bits, key, pos):
+    """XOR with rolling key position – returns encrypted bits + new position"""
+    out = []
+    for b in data_bits:
+        out.append( b ^ key[pos % len(key)] )
+        pos += 1
+    return out, pos
+
+# ────────────────────────────────────────
+# Wi-Fi connection
+# ────────────────────────────────────────
+wifi = network.WLAN(network.STA_IF)
+wifi.active(True)
+
+if not wifi.isconnected():
+    print("Connecting to WiFi...")
+    wifi.connect(SSID, PASSWORD)
+    timeout = 15
+    while not wifi.isconnected() and timeout > 0:
+        time.sleep(1)
+        timeout -= 1
+    if not wifi.isconnected():
+        print("WiFi connection failed!")
+        # You could add machine.reset() here after some retries
+    else:
+        print("Connected:", wifi.ifconfig())
+
+# ────────────────────────────────────────
+# Main loop
+# ────────────────────────────────────────
+while True:
+    if not wifi.isconnected():
+        print("WiFi lost → reconnecting...")
+        wifi.connect(SSID, PASSWORD)
+        time.sleep(3)
+        continue
+
+    try:
+        # temp = sensor.temperature           # usually float e.g. 23.45
+        temp=33.5
+        temp_scaled = int(temp * 10 + 0.5)  # round to nearest → 235 = 23.5 °C
+        print(f"Temperature: {temp:.2f} °C  → scaled: {temp_scaled}")
+
+        data_bits = int_to_bits(temp_scaled, 16)
+        print("Bits:", data_bits)
+
+        # global key_pos
+        enc_bits, key_pos = xor_encrypt(data_bits, qkd_key, key_pos)
+        print("Encrypted bits:", enc_bits)
+
+        send_data = "".join(map(str, enc_bits)) + "\n"
+
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(5.0)
+        s.connect((SERVER_IP, PORT))
+        s.send(send_data.encode())
+        s.close()
+
+        print("Data sent successfully:", send_data.strip())
+
+    except OSError as e:
+        print("Socket/WiFi OSError:", e)
+    except Exception as e:
+        print("Unexpected error:", e)
+
+    time.sleep(10)

@@ -30,18 +30,18 @@ def embed_message(img_bytes, message):
 
     bits = []
 
-    bits += int_to_bits(msg_len,16)
+    # store message length (16 bits)
+    bits += int_to_bits(msg_len, 16)
 
-    offset = 500
+    # convert message to bits
+    for b in msg_bytes:
+        bits += int_to_bits(b, 8)
 
-    for b in img_bytes[offset:]:
-        bits.append(b & 1)
-
-    offset = 500   # skip JPEG header
+    offset = 500  # skip JPEG header
 
     for i in range(len(bits)):
-    if offset + i < len(data):
-        data[offset + i] = (data[offset + i] & 0xFE) | bits[i]
+        if offset + i < len(data):
+            data[offset + i] = (data[offset + i] & 0xFE) | bits[i]
 
     return bytes(data)
 
@@ -92,12 +92,6 @@ while True:
 
     new_img = embed_message(buf, message)
 
-    # convert image to HEX
-    hex_data = ""
-
-    for b in new_img:
-        hex_data += "%02x" % b
-
     try:
 
         print("Connecting to server...")
@@ -107,10 +101,7 @@ while True:
 
         print("Sending image...")
 
-        chunk = 1024
-
-        for i in range(0, len(hex_data), chunk):
-            s.send(hex_data[i:i+chunk])
+        s.sendall(new_img)
 
         s.close()
 
@@ -119,6 +110,6 @@ while True:
     except Exception as e:
         print("Send failed:", e)
 
-    print("Waiting 60 seconds...\n")
+    print("Waiting 30 seconds...\n")
 
     time.sleep(30)
