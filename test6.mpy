@@ -28,7 +28,7 @@ PORT = 5000
 # ────────────────────────────────────────
 # Simulated long QKD key (in real QKD you'd get fresh bits from quantum source)
 # Shared QKD key (must match server)
-qkd_key =  [0, 1, 1, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 0]
+qkd_key =  [1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 0]
 
 print("QKD key:", qkd_key)
 # print("Generated simulated QKD key (first 32 bits):", qkd_key[:32])
