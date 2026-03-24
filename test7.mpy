@@ -3,10 +3,22 @@
 
 import network
 import socket
-from machine import Pin, SoftI2C
+from machine import Pin, I2C
 import time
-# import random   # uncomment if you want pseudo-random fallback
-import os       # for os.urandom() on ESP32
+from bmp180 import BMP180
+import dht
+import os       
+
+
+
+# pin declare 
+sensor = dht.DHT11(Pin(4))
+
+i2c = I2C(scl=Pin(22), sda=Pin(21), freq=100000)
+
+print("I2C devices:", i2c.scan())
+
+bmp180 = BMP180(i2c)
 
 # ────────────────────────────────────────
 # CONFIG
@@ -28,7 +40,7 @@ PORT = 5000
 # ────────────────────────────────────────
 # Simulated long QKD key (in real QKD you'd get fresh bits from quantum source)
 # Shared QKD key (must match server)
-qkd_key =   [1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1]
+qkd_key =   [1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 0]
 
 print("QKD key:", qkd_key)
 # print("Generated simulated QKD key (first 32 bits):", qkd_key[:32])
@@ -83,15 +95,11 @@ while True:
         continue
 
     try:
-        # temp = sensor.temperature           # usually float e.g. 23.45
-        temp = 33.5
-        hum = 61.2
-        press = 1012.3
-
-        temp_scaled  = int(temp * 10 + 0.5)
-        hum_scaled   = int(hum * 10 + 0.5)
-        press_scaled = int(press * 10 + 0.5)
-
+        sensor.measure()
+        temp_scaled  = int(sensor.temperature() * 10 + 0.5)
+        hum_scaled   = int(sensor.humidity() * 10 + 0.5)
+        press_scaled = int((bmp180.pressure / 100) * 10)
+ 
         print("Temp :", temp_scaled)
         print("Hum  :", hum_scaled)
         print("Press:", press_scaled)
