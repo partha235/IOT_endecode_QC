@@ -5,21 +5,37 @@ import time
 import urandom
 import machine
 
-SSID = "bps_wifi"
-PASSWORD = "sagabps@235"
+# ================= WIFI ACCESS POINT =================
+AP_SSID = "ESP32_CAM"
+AP_PASSWORD = "12345678"   # minimum 8 characters
 
-SERVER_IP = "192.168.1.7"
+ap = network.WLAN(network.AP_IF)
+ap.active(True)
+ap.config(essid=AP_SSID, password=AP_PASSWORD)
+
+print("Starting Access Point...")
+
+while not ap.active():
+    pass
+
+print("AP Started")
+print("Connect to WiFi:", AP_SSID)
+print("IP Address:", ap.ifconfig()[0])
+
+# ================= SERVER CONFIG =================
+# IMPORTANT: This should be your PC IP after connecting to ESP32 WiFi
+SERVER_IP = "192.168.4.2"
 PORT = 5000
 
+# ================= WORD LIST =================
 words = ["rock","arch","black hat","tree","water","fish"]
 
-# convert integer → bits
+# ================= UTILS =================
 def int_to_bits(value, bits):
     out = []
     for i in range(bits):
-        out.append((value >> (bits-1-i)) & 1)
+        out.append((value >> (bits - 1 - i)) & 1)
     return out
-
 
 def embed_message(img_bytes, message):
 
@@ -30,50 +46,29 @@ def embed_message(img_bytes, message):
 
     bits = []
 
-    bits += int_to_bits(msg_len,16)
+    # store message length (16 bits)
+    bits += int_to_bits(msg_len, 16)
 
-    offset = 500
+    offset = 500  # skip JPEG header
 
-    for b in img_bytes[offset:]:
-        bits.append(b & 1)
+    # store message bits
+    for b in msg_bytes:
+        for i in range(8):
+            bits.append((b >> (7 - i)) & 1)
 
-    offset = 500   # skip JPEG header
-
+    # embed bits into image
     for i in range(len(bits)):
         if offset + i < len(data):
             data[offset + i] = (data[offset + i] & 0xFE) | bits[i]
 
     return bytes(data)
 
-
-# WIFI CONNECT
-wifi = network.WLAN(network.STA_IF)
-wifi.active(False)
-time.sleep(1)
-
-wifi.active(True)
-wifi.connect(SSID, PASSWORD)
-
-print("Connecting WiFi...")
-
-timeout = 15
-while not wifi.isconnected():
-
-    time.sleep(1)
-    timeout -= 1
-
-    if timeout == 0:
-        print("WiFi failed, rebooting")
-        machine.reset()
-
-print("Connected:", wifi.ifconfig())
-
-
-# CAMERA INIT
+# ================= CAMERA INIT =================
 camera.init(0, format=camera.JPEG, framesize=camera.FRAME_QQVGA)
 
 print("Camera ready")
 
+# ================= MAIN LOOP =================
 while True:
 
     print("Capturing image...")
@@ -99,7 +94,6 @@ while True:
         hex_data += "%02x" % b
 
     try:
-
         print("Connecting to server...")
 
         s = socket.socket()
@@ -119,6 +113,6 @@ while True:
     except Exception as e:
         print("Send failed:", e)
 
-    print("Waiting 60 seconds...\n")
+    print("Waiting 30 seconds...\n")
 
     time.sleep(30)

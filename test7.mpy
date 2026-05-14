@@ -28,19 +28,11 @@ PASSWORD = "sagabps@235"
 SERVER_IP = "192.168.1.12"
 PORT = 5000
 
-# I2C pins – adjust if your wiring is different (GPIO2 & GPIO15 are common defaults)
-# i2c = SoftI2C(scl=Pin(2), sda=Pin(15), freq=100000)
-
-# You need to upload bmp280.py to the board first!
-# Recommended: https://github.com/dafvid/micropython-bmp280  (very lightweight)
-# or https://github.com/robert-hh/BME280 (bme280_float.py also works with BMP280)
-# from bmp280 import BMP280
-# sensor = BMP280(i2c)
 
 # ────────────────────────────────────────
 # Simulated long QKD key (in real QKD you'd get fresh bits from quantum source)
 # Shared QKD key (must match server)
-qkd_key =   [1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 0]
+qkd_key =   [1, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, 0]
 
 print("QKD key:", qkd_key)
 # print("Generated simulated QKD key (first 32 bits):", qkd_key[:32])
